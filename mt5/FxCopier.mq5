@@ -12,6 +12,9 @@ input double InpLots = 0.10;
 input long   InpMagic = 88001;
 input int    InpMaxSpreadPoints = 80; // adjust per broker/symbol
 
+// TakeProfit selection: use TP3 for option A (fallback to last TP if fewer)
+input int    InpTpIndex = 3; // 1=TP1, 2=TP2, 3=TP3 ...
+
 CTrade trade;
 long last_msg_id = -1;
 
@@ -90,6 +93,39 @@ bool SpreadOk(const string sym)
    return (spread <= InpMaxSpreadPoints);
 }
 
+double SelectTpFromArrayString(string arr, int tpIndex)
+{
+   // arr is like: "5231, 5232, 5233, 5260"
+   // we pick tpIndex (1-based). If not enough, pick last.
+
+   arr = StringTrim(arr);
+   if(arr == "") return 0.0;
+
+   int idxWanted = MathMax(1, tpIndex);
+   int current = 1;
+
+   while(true)
+   {
+      int comma = StringFind(arr, ",");
+      string token = (comma >= 0 ? StringSubstr(arr, 0, comma) : arr);
+      token = StringTrim(token);
+
+      double val = StringToDouble(token);
+      if(current == idxWanted && val > 0.0) return val;
+
+      if(comma < 0)
+      {
+         // no more tokens: fallback to this last value
+         return val;
+      }
+
+      // advance
+      arr = StringSubstr(arr, comma + 1);
+      arr = StringTrim(arr);
+      current++;
+   }
+}
+
 int OnInit()
 {
    trade.SetExpertMagicNumber((uint)InpMagic);
@@ -112,17 +148,13 @@ void OnTimer()
    if(!ok || msg_id <= 0) return;
    if(msg_id == last_msg_id) return;
 
-   // Extract nested signal fields by searching within "signal":{...}
-   int ps = StringFind(json, "\"signal\"");
-   if(ps < 0) return;
-
    string side = JsonGetString(json, "side");
    string symbol = JsonGetString(json, "symbol");
 
    bool sl_ok=false;
    double sl = JsonGetNumber(json, "sl", sl_ok);
 
-   // TP: take first tp if present
+   // TP: pick TP3 (or selected index) if present, otherwise last TP
    double tp = 0.0;
    int ptp = StringFind(json, "\"tp\"");
    if(ptp >= 0)
@@ -132,11 +164,7 @@ void OnTimer()
       if(b1 > 0 && b2 > b1)
       {
          string arr = StringSubstr(json, b1+1, b2-b1-1);
-         // first number until comma
-         int comma = StringFind(arr, ",");
-         string first = (comma>0? StringSubstr(arr,0,comma):arr);
-         first = StringTrim(first);
-         tp = StringToDouble(first);
+         tp = SelectTpFromArrayString(arr, InpTpIndex);
       }
    }
 
@@ -155,21 +183,16 @@ void OnTimer()
       return;
    }
 
-   // Place trade
    bool placed=false;
    if(side == "BUY")
-   {
       placed = trade.Buy(InpLots, symbol, 0.0, sl_ok?sl:0.0, tp>0?tp:0.0, "FxCopier");
-   }
    else
-   {
       placed = trade.Sell(InpLots, symbol, 0.0, sl_ok?sl:0.0, tp>0?tp:0.0, "FxCopier");
-   }
 
    if(placed)
    {
       last_msg_id = msg_id;
-      Print("Placed ", side, " ", symbol, " from msg_id=", msg_id);
+      Print("Placed ", side, " ", symbol, " TP=", DoubleToString(tp, (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS)), " from msg_id=", msg_id);
    }
    else
    {
