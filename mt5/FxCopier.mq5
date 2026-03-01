@@ -8,7 +8,7 @@
 
 input string InpBridgeUrl = "http://127.0.0.1:8000/latest";
 input int    InpPollSeconds = 5;
-input double InpLots = 0.10;
+input double InpLots = 1.00; // default 1.0 as requested
 input long   InpMagic = 88001;
 input int    InpMaxSpreadPoints = 80; // adjust per broker/symbol
 
