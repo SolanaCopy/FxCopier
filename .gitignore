@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Telethon session
+*.session
+*.session-journal
+
+# Logs
+*.log
+
+# MT5 build artifacts (optional)
+*.ex5
